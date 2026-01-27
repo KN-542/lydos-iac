@@ -1,0 +1,33 @@
+{
+  "name": "lydos-iac",
+  "version": "0.1.0",
+  "bin": {
+    "lydos-iac": "bin/lydos-iac.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.13",
+    "@types/jest": "^30",
+    "@types/node": "^25.0.10",
+    "aws-cdk": "2.1101.0",
+    "jest": "^30",
+    "ts-jest": "^29",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.234.1",
+    "constructs": "^10.0.0",
+    "dotenv": "^17.2.3"
+  }
+}
