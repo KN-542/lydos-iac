@@ -89,13 +89,13 @@ bunx cdk deploy --all
   - Private Subnet × 2 (AZ分散)
 - **RDS**: PostgreSQL 16 (t3.micro)
 - **ElastiCache**: Redis 7.1 (cache.t3.micro)
-- **Bastion Host**: Amazon Linux 2023 (t3.micro) ※オプション
+- **Bastion Host**: Amazon Linux 2023 (t3.micro)
 
 ### AmplifyStack
 
 - **Platform**: WEB (React SPA)
 - **Build**: Bun
-- **Custom Domain**: lydos.click (設定可能)
+- **Custom Domain**: lydos.click
 
 ## Bastion Host 経由でのデータベース接続
 
@@ -122,42 +122,27 @@ bunx cdk deploy --all
 ### 2. GUI ツールで接続
 
 #### PostgreSQL
-TablePlus や DBeaver などで：
-1. 新規接続を作成
-2. SSH タブまたはトンネル設定を開く
-3. SSH 接続情報を入力：
+1. SSH タブまたはトンネル設定を開く
+2. SSH 接続情報を入力：
    - SSH Host: Bastion の Public IP
    - SSH User: `ec2-user`
    - SSH Key: `~/.ssh/lydos-bastion.pem`
-4. データベース接続情報を入力：
+3. データベース接続情報を入力：
    - Host: RDS Endpoint
    - Port: `5432`
    - Database: `lydos`
    - User: `postgres`
    - Password: Secrets Manager から取得
-5. テスト接続 → 保存
+4. テスト接続 → 保存
 
 #### Redis
-RedisInsight や Medis などで：
-1. 新規接続を作成
-2. SSH トンネル設定を有効化
-3. SSH 接続情報を入力：
+1. SSH トンネル設定を有効化
+2. SSH 接続情報を入力：
    - SSH Host: Bastion の Public IP
    - SSH User: `ec2-user`
    - SSH Key: `~/.ssh/lydos-bastion.pem`
-4. Redis 接続情報を入力：
+3. Redis 接続情報を入力：
    - Host: Redis Endpoint（ノードタブから取得）
    - Port: `6379`
    - Password: なし
-5. テスト接続 → 保存
-
-## コスト最適化
-
-- NAT Gateway なし（約 $32/月 削減）
-- RDS シングル AZ
-- ElastiCache レプリケーションなし
-- Bastion Host はオプション（必要な時のみ起動）
-
-## 環境変数
-
-必須の環境変数は `.env.example` を参照してください。
+4. テスト接続 → 保存
