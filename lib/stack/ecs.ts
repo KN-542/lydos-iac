@@ -1,0 +1,102 @@
+import * as cdk from 'aws-cdk-lib'
+import * as ecs from 'aws-cdk-lib/aws-ecs'
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
+import type { Construct } from 'constructs'
+import type { EnvConfig } from '../env'
+import type { DatabaseStack } from './database'
+import { CodePipeline } from './resource/codepipeline'
+import { Ecr } from './resource/ecr'
+import { EcsService } from './resource/ecs'
+
+export interface EcsStackProps extends cdk.StackProps {
+  config: EnvConfig
+  databaseStack: DatabaseStack
+}
+
+export class EcsStack extends cdk.Stack {
+  public readonly ecr: Ecr
+  public readonly ecsService: EcsService
+  public readonly codePipeline: CodePipeline
+
+  constructor(scope: Construct, id: string, props: EcsStackProps) {
+    super(scope, id, props)
+
+    // ECRリポジトリ（既存のものをインポート）
+    this.ecr = new Ecr(this, 'Ecr', {
+      repositoryName: 'lydos-api',
+      importExisting: true, // 既存リポジトリをインポート
+    })
+
+    // Secrets Managerにシークレットを作成
+    const clerkSecret = new secretsmanager.Secret(this, 'ClerkSecret', {
+      secretName: 'lydos/clerk-secret-key',
+      secretStringValue: cdk.SecretValue.unsafePlainText(props.config.clerkSecretKey),
+      description: 'Clerk Secret Key for Lydos API',
+    })
+
+    const stripeSecret = new secretsmanager.Secret(this, 'StripeSecret', {
+      secretName: 'lydos/stripe-secret-key',
+      secretStringValue: cdk.SecretValue.unsafePlainText(props.config.stripeSecretKey),
+      description: 'Stripe Secret Key for Lydos API',
+    })
+
+    // RDSとElastiCacheのエンドポイント取得
+    const redisHost = props.databaseStack.elasticache.cluster.attrRedisEndpointAddress
+    const redisPort = props.databaseStack.elasticache.cluster.attrRedisEndpointPort
+
+    // フロントエンドURL
+    const frontendUrl = props.config.subdomain
+      ? `https://${props.config.subdomain}.${props.config.domainName}`
+      : `https://${props.config.domainName}`
+
+    // 環境変数
+    const environment: Record<string, string> = {
+      NODE_ENV: 'production',
+      PORT: '3001',
+      HOSTNAME: '0.0.0.0',
+      CORS_ORIGIN: frontendUrl,
+      FRONTEND_URL: frontendUrl,
+      DATABASE_HOST: props.databaseStack.rds.instance.dbInstanceEndpointAddress,
+      DATABASE_PORT: props.databaseStack.rds.instance.dbInstanceEndpointPort,
+      DATABASE_NAME: props.config.rdsDatabaseName || 'lydos',
+      REDIS_HOST: redisHost,
+      REDIS_PORT: redisPort,
+    }
+
+    // シークレット
+    const secrets: Record<string, ecs.Secret> = {
+      DATABASE_URL: ecs.Secret.fromSecretsManager(
+        props.databaseStack.rds.instance.secret!,
+        'password',
+      ),
+      CLERK_SECRET_KEY: ecs.Secret.fromSecretsManager(clerkSecret),
+      STRIPE_SECRET_KEY: ecs.Secret.fromSecretsManager(stripeSecret),
+    }
+
+    // ECSサービス
+    this.ecsService = new EcsService(this, 'EcsService', {
+      vpc: props.databaseStack.vpc.vpc,
+      repository: this.ecr.repository,
+      domainName: props.config.domainName,
+      subdomain: props.config.apiSubdomain,
+      cpu: props.config.apiTaskCpu,
+      memory: props.config.apiTaskMemory,
+      desiredCount: props.config.apiDesiredCount,
+      environment,
+      secrets,
+      rdsSecurityGroupId: props.databaseStack.rds.securityGroup.securityGroupId,
+      redisSecurityGroupId: props.databaseStack.elasticache.securityGroup.securityGroupId,
+    })
+
+    // CodePipeline（CI/CD）
+    this.codePipeline = new CodePipeline(this, 'CodePipeline', {
+      repository: this.ecr.repository,
+      ecsService: this.ecsService.service,
+      ecsCluster: this.ecsService.cluster,
+      githubOwner: props.config.apiGithubOwner,
+      githubRepo: props.config.apiGithubRepo,
+      githubBranch: props.config.apiGithubBranch,
+      githubTokenSecretName: props.config.githubTokenSecretName,
+    })
+  }
+}

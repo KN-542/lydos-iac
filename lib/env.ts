@@ -21,6 +21,15 @@ export interface EnvConfig {
   bastionInstanceType?: string
   bastionKeyPairName: string
   bastionAllowedCidrs: string[]
+  apiSubdomain: string
+  apiTaskCpu: number
+  apiTaskMemory: number
+  apiDesiredCount: number
+  apiGithubOwner: string
+  apiGithubRepo: string
+  apiGithubBranch: string
+  clerkSecretKey: string
+  stripeSecretKey: string
 }
 
 export function getEnvConfig(): EnvConfig {
@@ -53,6 +62,15 @@ export function getEnvConfig(): EnvConfig {
     bastionInstanceType: process.env.BASTION_INSTANCE_TYPE || undefined,
     bastionKeyPairName: getRequiredEnv('BASTION_KEY_PAIR_NAME'),
     bastionAllowedCidrs,
+    apiSubdomain: getRequiredEnv('API_SUBDOMAIN'),
+    apiTaskCpu: Number.parseInt(getRequiredEnv('API_TASK_CPU'), 10),
+    apiTaskMemory: Number.parseInt(getRequiredEnv('API_TASK_MEMORY'), 10),
+    apiDesiredCount: Number.parseInt(getRequiredEnv('API_DESIRED_COUNT'), 10),
+    apiGithubOwner: getRequiredEnv('API_GITHUB_OWNER'),
+    apiGithubRepo: getRequiredEnv('API_GITHUB_REPO'),
+    apiGithubBranch: getRequiredEnv('API_GITHUB_BRANCH'),
+    clerkSecretKey: getRequiredEnv('CLERK_SECRET_KEY'),
+    stripeSecretKey: getRequiredEnv('STRIPE_SECRET_KEY'),
   }
 }
 

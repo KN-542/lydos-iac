@@ -6,7 +6,8 @@ Lydosで何を作るかは未定です
 ## スタック構成
 
 1. **LydosDatabaseStack** - VPC、RDS (PostgreSQL)、ElastiCache (Redis)、Bastion Host
-2. **LydosAmplifyStack** - AWS Amplify (React SPA ホスティング)
+2. **LydosEcsStack** - ECR、ECS Fargate、ALB、API サービス、CI/CDパイプライン
+3. **LydosAmplifyStack** - AWS Amplify (React SPA ホスティング)
 
 ## 前提条件
 
@@ -40,6 +41,14 @@ bunx cdk bootstrap
 
 ## デプロイ
 
+### デプロイ順序
+
+依存関係があるため、以下の順序でデプロイしてください：
+
+```
+LydosDatabaseStack → LydosEcsStack → LydosAmplifyStack
+```
+
 ### 1. DatabaseStack のデプロイ
 
 ```bash
@@ -48,7 +57,58 @@ bunx cdk deploy LydosDatabaseStack
 
 VPC、RDS、ElastiCache、Bastion Host が作成されます。
 
-### 2. AmplifyStack のデプロイ
+**所要時間**: 15-20分（RDS作成に時間がかかります）
+
+### 2. EcsStack のデプロイ
+
+```bash
+bunx cdk deploy LydosEcsStack
+```
+
+ECR、ECS Fargate、ALB、API サービス、CI/CDパイプラインが作成されます。
+
+**所要時間**: 10-15分
+
+**⚠️ 注意**: ACM証明書のDNS検証が必要です。Route53にCNAMEレコードを追加してください。
+
+#### ACM証明書のDNS検証手順
+
+1. 証明書の詳細を確認：
+```bash
+aws acm list-certificates --region ap-northeast-1
+```
+
+2. 検証レコードを確認：
+```bash
+aws acm describe-certificate --certificate-arn <CertificateArn> --region ap-northeast-1
+```
+
+3. Route53にCNAMEレコードを追加（出力された`ResourceRecord`の値を使用）
+
+4. 証明書が発行されるまで待つ（5-30分）
+
+#### 初回デプロイ後の作業
+
+ECSスタックのデプロイ後、Dockerイメージをビルドしてプッシュしてください：
+
+```bash
+# ECRログイン
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com
+
+# イメージビルド
+cd ../lydos-api
+docker build -t lydos-api .
+
+# タグ付け
+docker tag lydos-api:latest <ECR_URI>/lydos-api:latest
+
+# プッシュ
+docker push <ECR_URI>/lydos-api:latest
+```
+
+その後、ECSサービスが自動的にタスクを起動します。
+
+### 3. AmplifyStack のデプロイ
 
 ```bash
 bunx cdk deploy LydosAmplifyStack
@@ -56,11 +116,15 @@ bunx cdk deploy LydosAmplifyStack
 
 AWS Amplify アプリケーションが作成され、GitHub リポジトリと連携されます。
 
+**所要時間**: 5-10分
+
 ### すべてのスタックを一度にデプロイ
 
 ```bash
 bunx cdk deploy --all
 ```
+
+**⚠️ 注意**: 依存関係があるため、順次デプロイされます。全体で30-45分程度かかります。
 
 ## 便利なコマンド
 
@@ -92,11 +156,32 @@ bunx cdk deploy --all
 - **ElastiCache**: Redis 7.1 (cache.t3.micro)
 - **Bastion Host**: Amazon Linux 2023 (t3.micro)
 
+### EcsStack
+
+- **ECR**: Docker イメージリポジトリ
+  - リポジトリ名: `lydos-api`
+  - イメージスキャン有効
+  - ライフサイクルルール: 最新10イメージ保持
+- **ECS Fargate**: コンテナ実行環境
+  - クラスター: `lydos-api-cluster`
+  - タスク: 0.25vCPU / 0.5GB メモリ
+  - Publicサブネットに配置
+- **ALB**: Application Load Balancer
+  - HTTPS対応（ACM証明書）
+  - HTTPからHTTPSへリダイレクト
+  - ドメイン: `api.lydos.click`
+- **Secrets Manager**:
+  - Clerk Secret Key
+  - Stripe Secret Key
+- **CI/CDパイプライン**:
+  - GitHub → CodePipeline → CodeBuild → ECR → ECS
+  - `lydos-api` リポジトリの `main` ブランチにpushすると自動デプロイ
+
 ### AmplifyStack
 
 - **Platform**: WEB (React SPA)
 - **Build**: Bun
-- **Custom Domain**: lydos.click
+- **Custom Domain**: www.lydos.click
 
 ## Bastion Host 経由でのデータベース接続
 
@@ -147,3 +232,131 @@ bunx cdk deploy --all
    - Port: `6379`
    - Password: なし
 4. テスト接続 → 保存
+
+## CI/CD パイプライン
+
+### 概要
+
+`lydos-api` リポジトリの `main` ブランチにコードをプッシュすると、自動的にECSにデプロイされます。
+
+### フロー
+
+```
+GitHub (lydos-api/main)
+  ↓ git push
+CodePipeline
+  ↓ Source Stage
+GitHub Checkout
+  ↓ Build Stage
+CodeBuild
+  - Dockerイメージビルド
+  - ECRにプッシュ
+  - imagedefinitions.json生成
+  ↓ Deploy Stage
+ECS Deploy
+  - 新しいタスク定義作成
+  - サービス更新（ローリングデプロイ）
+```
+
+### パイプライン確認
+
+```bash
+# パイプライン一覧
+aws codepipeline list-pipelines
+
+# パイプライン詳細
+aws codepipeline get-pipeline --name lydos-api-pipeline
+
+# 実行履歴
+aws codepipeline list-pipeline-executions --pipeline-name lydos-api-pipeline
+```
+
+### 手動デプロイ（パイプラインを使わない場合）
+
+```bash
+# 1. ECRログイン
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com
+
+# 2. イメージビルド
+cd lydos-api
+docker build -t lydos-api .
+
+# 3. タグ付け
+docker tag lydos-api:latest <ECR_URI>/lydos-api:latest
+
+# 4. プッシュ
+docker push <ECR_URI>/lydos-api:latest
+
+# 5. ECSサービス更新（新しいイメージを使用）
+aws ecs update-service --cluster lydos-api-cluster --service lydos-api-service --force-new-deployment --region ap-northeast-1
+```
+
+## トラブルシューティング
+
+### ACM証明書の検証が完了しない
+
+**症状**: ECSスタックのデプロイが長時間止まる
+
+**原因**: DNS検証レコードが正しく追加されていない
+
+**解決方法**:
+1. Route53のホストゾーンを確認
+2. ACM証明書の検証レコード（CNAME）が存在するか確認
+3. DNSの伝播を待つ（最大30分）
+
+### ECSタスクが起動しない
+
+**症状**: ECSサービスは作成されたがタスクが0個
+
+**原因**: ECRにイメージがない、または環境変数/シークレットの問題
+
+**解決方法**:
+```bash
+# 1. ECRイメージ確認
+aws ecr list-images --repository-name lydos-api --region ap-northeast-1
+
+# 2. タスク定義確認
+aws ecs describe-task-definition --task-definition lydos-api-task-def --region ap-northeast-1
+
+# 3. サービスイベント確認
+aws ecs describe-services --cluster lydos-api-cluster --services lydos-api-service --region ap-northeast-1
+
+# 4. CloudWatch Logsでエラー確認
+aws logs tail /ecs/lydos-api --follow --region ap-northeast-1
+```
+
+### CI/CDパイプラインが失敗する
+
+**症状**: CodeBuildでビルドが失敗
+
+**解決方法**:
+```bash
+# ビルドログ確認
+aws codebuild batch-get-builds --ids <build-id> --region ap-northeast-1
+```
+
+一般的な原因:
+- Dockerfileの構文エラー
+- 依存関係のインストール失敗
+- ECRへのプッシュ権限不足
+
+## 費用概算
+
+### 月額コスト（24時間稼働の場合）
+
+- **RDS (t3.micro)**: ~$15
+- **ElastiCache (cache.t3.micro)**: ~$12
+- **Bastion (t3.micro)**: ~$7
+- **ECS Fargate (0.25vCPU/0.5GB)**: ~$10
+- **ALB**: ~$16
+- **NAT Gateway**: $0（使用していない）
+- **その他（ECR、Secrets Manager、CloudWatch Logs）**: ~$5
+
+**合計**: 約 $65/月
+
+### コスト削減のヒント
+
+- Bastionを使わないときは停止する
+- 開発環境は使用時のみ起動
+- CloudWatch Logsの保持期間を短くする（現在1週間）
+- ALBのアイドル削除を有効化
