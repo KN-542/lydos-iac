@@ -1,7 +1,7 @@
 # Lydos IaC
 
 AWS CDK (TypeScript) で構築する Lydos のインフラストラクチャ
-Lydosで何を作るかは未定です
+簡易AIチャットアプリになりました。
 
 ## スタック構成
 
