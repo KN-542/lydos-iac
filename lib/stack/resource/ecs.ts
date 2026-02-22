@@ -5,6 +5,7 @@ import type * as ecr from 'aws-cdk-lib/aws-ecr'
 import * as ecs from 'aws-cdk-lib/aws-ecs'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2'
 import * as logs from 'aws-cdk-lib/aws-logs'
+import * as route53 from 'aws-cdk-lib/aws-route53'
 import { Construct } from 'constructs'
 
 export interface EcsServiceProps {
@@ -19,6 +20,8 @@ export interface EcsServiceProps {
   secrets: Record<string, ecs.Secret>
   rdsSecurityGroupId: string
   redisSecurityGroupId: string
+  allowedCidrs?: string[]
+  hostedZoneId: string
 }
 
 export class EcsService extends Construct {
@@ -32,10 +35,16 @@ export class EcsService extends Construct {
 
     const fullDomain = `${props.subdomain}.${props.domainName}`
 
-    // ACM証明書を作成（DNS検証）
+    // Route53 ホストゾーンを取得
+    const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+      hostedZoneId: props.hostedZoneId,
+      zoneName: props.domainName,
+    })
+
+    // ACM証明書を作成（DNS検証 - ホストゾーン指定で自動検証）
     this.certificate = new acm.Certificate(this, 'Certificate', {
       domainName: fullDomain,
-      validation: acm.CertificateValidation.fromDns(),
+      validation: acm.CertificateValidation.fromDns(hostedZone),
     })
 
     // ECSクラスターを作成
@@ -89,17 +98,15 @@ export class EcsService extends Construct {
       allowAllOutbound: true,
     })
 
-    // インターネットからHTTP/HTTPSアクセスを許可
-    albSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(80),
-      'Allow HTTP from internet',
-    )
-    albSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(443),
-      'Allow HTTPS from internet',
-    )
+    // HTTP/HTTPS アクセスを許可（allowedCidrs が指定されている場合はそのIPのみ）
+    const peers =
+      props.allowedCidrs && props.allowedCidrs.length > 0
+        ? props.allowedCidrs.map((cidr) => ec2.Peer.ipv4(cidr))
+        : [ec2.Peer.anyIpv4()]
+    for (const peer of peers) {
+      albSecurityGroup.addIngressRule(peer, ec2.Port.tcp(80), 'Allow HTTP')
+      albSecurityGroup.addIngressRule(peer, ec2.Port.tcp(443), 'Allow HTTPS')
+    }
 
     // Application Load Balancer
     this.alb = new elbv2.ApplicationLoadBalancer(this, 'ALB', {

@@ -6,8 +6,9 @@ AWS CDK (TypeScript) で構築する Lydos のインフラストラクチャ
 ## スタック構成
 
 1. **LydosDatabaseStack** - VPC、RDS (PostgreSQL)、ElastiCache (Redis)、Bastion Host
-2. **LydosEcsStack** - ECR、ECS Fargate、ALB、API サービス、CI/CDパイプライン
-3. **LydosAmplifyStack** - AWS Amplify (React SPA ホスティング)
+2. **LydosEcsStack** - ECR、初回 Docker ビルド (Custom Resource)、ECS Fargate、ALB
+3. **LydosPipelineStack** - CodePipeline (CI/CD)
+4. **LydosAmplifyStack** - AWS Amplify (React SPA ホスティング)
 
 ## 前提条件
 
@@ -33,6 +34,17 @@ cp .env.example .env
 
 `.env` ファイルを編集して、適切な値を設定してください。
 
+| 変数名 | 説明 | 取得先 |
+|---|---|---|
+| `AWS_ACCOUNT_ID` | AWS アカウント ID | AWS コンソール |
+| `CLERK_SECRET_KEY` | Clerk シークレットキー | Clerk ダッシュボード > API Keys |
+| `STRIPE_SECRET_KEY` | Stripe シークレットキー | Stripe ダッシュボード > API Keys |
+| `GEMINI_API_KEY` | Gemini API キー | Google AI Studio |
+| `GROQ_API_KEY` | Groq API キー | Groq Console |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk 公開キー (`pk_...`) | Clerk ダッシュボード > API Keys |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe 公開キー (`pk_...`) | Stripe ダッシュボード > API Keys |
+| `BASTION_KEY_PAIR_NAME` | Bastion 用 EC2 キーペア名 | AWS EC2 コンソール > キーペア |
+
 ### 3. AWS CDK Bootstrap（初回のみ）
 
 ```bash
@@ -46,7 +58,10 @@ bunx cdk bootstrap
 依存関係があるため、以下の順序でデプロイしてください：
 
 ```
-LydosDatabaseStack → LydosEcsStack → LydosAmplifyStack
+1. cdk deploy LydosDatabaseStack   # VPC, RDS, ElastiCache, Bastion
+2. cdk deploy LydosEcsStack        # ECR 作成 → 初回 Docker ビルド & ECR プッシュ → ECS 起動 → マイグレーション & シード
+3. cdk deploy LydosPipelineStack   # CI/CD（以降は main push で自動デプロイ）
+   cdk deploy LydosAmplifyStack    # フロントエンド（3と順不同・並行可）
 ```
 
 ### 1. DatabaseStack のデプロイ
@@ -65,9 +80,10 @@ VPC、RDS、ElastiCache、Bastion Host が作成されます。
 bunx cdk deploy LydosEcsStack
 ```
 
-ECR、ECS Fargate、ALB、API サービス、CI/CDパイプラインが作成されます。
+ECR が作成され、CDK Custom Resource により初回 Docker ビルドが実行されて ECR にイメージがプッシュされます。
+その後 ECS Fargate サービスが起動し、`docker-entrypoint.sh` によりマイグレーション & シードが自動実行されます。
 
-**所要時間**: 10-15分
+**所要時間**: 20-30分（初回 Docker ビルド込み）
 
 **⚠️ 注意**: ACM証明書のDNS検証が必要です。Route53にCNAMEレコードを追加してください。
 
@@ -87,28 +103,18 @@ aws acm describe-certificate --certificate-arn <CertificateArn> --region ap-nort
 
 4. 証明書が発行されるまで待つ（5-30分）
 
-#### 初回デプロイ後の作業
 
-ECSスタックのデプロイ後、Dockerイメージをビルドしてプッシュしてください：
+### 3. PipelineStack のデプロイ
 
 ```bash
-# ECRログイン
-aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com
-
-# イメージビルド
-cd ../lydos-api
-docker build -t lydos-api .
-
-# タグ付け
-docker tag lydos-api:latest <ECR_URI>/lydos-api:latest
-
-# プッシュ
-docker push <ECR_URI>/lydos-api:latest
+bunx cdk deploy LydosPipelineStack
 ```
 
-その後、ECSサービスが自動的にタスクを起動します。
+CodePipeline を構築します。以降は `lydos-api` の `main` ブランチへの push で自動デプロイされます。
 
-### 3. AmplifyStack のデプロイ
+**所要時間**: 5分
+
+### 4. AmplifyStack のデプロイ
 
 ```bash
 bunx cdk deploy LydosAmplifyStack
@@ -170,12 +176,17 @@ bunx cdk deploy --all
   - HTTPS対応（ACM証明書）
   - HTTPからHTTPSへリダイレクト
   - ドメイン: `api.lydos.click`
+- **初回ビルド (Custom Resource)**:
+  - CDK デプロイ時に CodeBuild を同期実行、ECR にイメージをプッシュ後に ECS が起動
 - **Secrets Manager**:
   - Clerk Secret Key
   - Stripe Secret Key
-- **CI/CDパイプライン**:
-  - GitHub → CodePipeline → CodeBuild → ECR → ECS
-  - `lydos-api` リポジトリの `main` ブランチにpushすると自動デプロイ
+  - Gemini API Key
+  - Groq API Key
+
+### PipelineStack
+
+- **CodePipeline**: GitHub `main` push → CodeBuild → ECR → ECS ローリングデプロイ
 
 ### AmplifyStack
 

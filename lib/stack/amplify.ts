@@ -11,6 +11,8 @@ export class AmplifyStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: AmplifyStackProps) {
     super(scope, id, props)
 
+    const apiUrl = `https://${props.config.apiSubdomain}.${props.config.domainName}`
+
     // Amplify
     new Amplify(this, 'Amplify', {
       domainName: props.config.domainName,
@@ -21,6 +23,12 @@ export class AmplifyStack extends cdk.Stack {
       githubTokenSecretName: props.config.githubTokenSecretName,
       amplifyAppName: props.config.amplifyAppName,
       environment: props.config.environment,
+      environmentVariables: {
+        VITE_API_URL: apiUrl,
+        VITE_CLERK_PUBLISHABLE_KEY: props.config.viteClerkPublishableKey,
+        VITE_STRIPE_PUBLISHABLE_KEY: props.config.viteStripePublishableKey,
+      },
+      allowedCidrs: props.config.bastionAllowedCidrs,
     })
   }
 }

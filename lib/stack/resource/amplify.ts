@@ -4,6 +4,7 @@ import * as iam from 'aws-cdk-lib/aws-iam'
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
 import * as cr from 'aws-cdk-lib/custom-resources'
 import { Construct } from 'constructs'
+import { AmplifyWaf } from './amplify-waf'
 
 export interface AmplifyProps {
   domainName: string
@@ -14,6 +15,8 @@ export interface AmplifyProps {
   githubTokenSecretName: string
   amplifyAppName: string
   environment: string
+  environmentVariables?: Record<string, string>
+  allowedCidrs?: string[]
 }
 
 export class Amplify extends Construct {
@@ -42,6 +45,9 @@ export class Amplify extends Construct {
       repository: `https://github.com/${props.githubOwner}/${props.githubRepo}`,
       accessToken: githubToken.secretValue.unsafeUnwrap(),
       platform: 'WEB',
+      environmentVariables: props.environmentVariables
+        ? Object.entries(props.environmentVariables).map(([name, value]) => ({ name, value }))
+        : undefined,
       buildSpec: JSON.stringify({
         version: '1.0',
         frontend: {
@@ -137,6 +143,15 @@ export class Amplify extends Construct {
 
     // ブランチ作成後に実行
     startJob.node.addDependency(this.branch)
+
+    // WAF による IP 制限（allowedCidrs が指定されている場合）
+    if (props.allowedCidrs && props.allowedCidrs.length > 0) {
+      const waf = new AmplifyWaf(this, 'Waf', {
+        amplifyAppId: this.amplifyApp.attrAppId,
+        allowedCidrs: props.allowedCidrs,
+      })
+      waf.node.addDependency(this.amplifyApp)
+    }
 
     // Outputs
     new cdk.CfnOutput(this, 'AmplifyAppId', {

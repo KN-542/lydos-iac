@@ -111,6 +111,8 @@ export class EcsStack extends cdk.Stack {
       secrets,
       rdsSecurityGroupId: props.databaseStack.rds.securityGroup.securityGroupId,
       redisSecurityGroupId: props.databaseStack.elasticache.securityGroup.securityGroupId,
+      allowedCidrs: props.config.bastionAllowedCidrs,
+      hostedZoneId: props.config.hostedZoneId,
     })
     this.ecsService.node.addDependency(initialBuild.customResource)
   }

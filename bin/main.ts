@@ -3,6 +3,7 @@ import { getEnvConfig } from '../lib/env'
 import { AmplifyStack } from '../lib/stack/amplify'
 import { DatabaseStack } from '../lib/stack/database'
 import { EcsStack } from '../lib/stack/ecs'
+import { PipelineStack } from '../lib/stack/pipeline'
 
 const app = new cdk.App()
 
@@ -21,15 +22,23 @@ const databaseStack = new DatabaseStack(app, 'LydosDatabaseStack', {
   description: 'Lydos Database Stack - VPC, RDS, ElastiCache, Bastion',
 })
 
-// 2. ECSスタック（DatabaseStackに依存）
-new EcsStack(app, 'LydosEcsStack', {
+// 2. ECSスタック（DatabaseStackに依存）: ECR → 初回ビルド → ECS
+const ecsStack = new EcsStack(app, 'LydosEcsStack', {
   config,
   databaseStack,
   env,
-  description: 'Lydos ECS Stack - ECR, ECS Fargate, ALB, API Service',
+  description: 'Lydos ECS Stack - ECR, Initial Build, ECS Fargate, ALB',
 })
 
-// 3. Amplifyスタック（独立）
+// 3. Pipelineスタック（EcsStackに依存）: CI/CD
+new PipelineStack(app, 'LydosPipelineStack', {
+  config,
+  ecsStack,
+  env,
+  description: 'Lydos Pipeline Stack - CodePipeline CI/CD',
+})
+
+// 4. Amplifyスタック（独立）
 new AmplifyStack(app, 'LydosAmplifyStack', {
   config,
   env,

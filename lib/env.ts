@@ -30,6 +30,11 @@ export interface EnvConfig {
   apiGithubBranch: string
   clerkSecretKey: string
   stripeSecretKey: string
+  geminiApiKey: string
+  groqApiKey: string
+  viteClerkPublishableKey: string
+  viteStripePublishableKey: string
+  hostedZoneId: string
 }
 
 export function getEnvConfig(): EnvConfig {
@@ -71,6 +76,11 @@ export function getEnvConfig(): EnvConfig {
     apiGithubBranch: getRequiredEnv('API_GITHUB_BRANCH'),
     clerkSecretKey: getRequiredEnv('CLERK_SECRET_KEY'),
     stripeSecretKey: getRequiredEnv('STRIPE_SECRET_KEY'),
+    geminiApiKey: getRequiredEnv('GEMINI_API_KEY'),
+    groqApiKey: getRequiredEnv('GROQ_API_KEY'),
+    viteClerkPublishableKey: getRequiredEnv('VITE_CLERK_PUBLISHABLE_KEY'),
+    viteStripePublishableKey: getRequiredEnv('VITE_STRIPE_PUBLISHABLE_KEY'),
+    hostedZoneId: getRequiredEnv('HOSTED_ZONE_ID'),
   }
 }
 
