@@ -6,6 +6,7 @@ import * as ecs from 'aws-cdk-lib/aws-ecs'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2'
 import * as logs from 'aws-cdk-lib/aws-logs'
 import * as route53 from 'aws-cdk-lib/aws-route53'
+import * as route53targets from 'aws-cdk-lib/aws-route53-targets'
 import { Construct } from 'constructs'
 
 export interface EcsServiceProps {
@@ -196,6 +197,13 @@ export class EcsService extends Construct {
 
     // ECRからのpull権限を付与
     props.repository.grantPull(taskDefinition.taskRole)
+
+    // Route53 Aレコード（ALBへのエイリアス）
+    new route53.ARecord(this, 'ApiARecord', {
+      zone: hostedZone,
+      recordName: props.subdomain,
+      target: route53.RecordTarget.fromAlias(new route53targets.LoadBalancerTarget(this.alb)),
+    })
 
     // 出力
     new cdk.CfnOutput(this, 'AlbDnsName', {

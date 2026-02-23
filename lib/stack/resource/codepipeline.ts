@@ -73,6 +73,7 @@ export class CodePipeline extends Construct {
               // Bun インストール
               'curl -fsSL https://bun.sh/install | bash',
               'ln -sf $HOME/.bun/bin/bun /usr/local/bin/bun',
+              'ln -sf $HOME/.bun/bin/bunx /usr/local/bin/bunx',
             ],
           },
           pre_build: {
