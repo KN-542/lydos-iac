@@ -21,6 +21,22 @@ export class AmplifyWaf extends Construct {
 const { WAFV2Client, CreateIPSetCommand, UpdateIPSetCommand, DeleteIPSetCommand, GetIPSetCommand, CreateWebACLCommand, DeleteWebACLCommand, GetWebACLCommand } = require('@aws-sdk/client-wafv2');
 const { AmplifyClient, AssociateWebACLCommand, DisassociateWebACLCommand } = require('@aws-sdk/client-amplify');
 const waf = new WAFV2Client({ region: 'us-east-1' });
+
+async function withRetry(fn, retries = 5, delayMs = 3000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e.name === 'WAFUnavailableEntityException' && i < retries - 1) {
+        console.log('WAFUnavailableEntityException, retrying in', delayMs, 'ms...');
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 exports.handler = async (event) => {
   const props = event.ResourceProperties;
   const cidrs = JSON.parse(props.AllowedCidrs);
@@ -58,7 +74,8 @@ exports.handler = async (event) => {
     ipSetId = ipSetResult.Summary.Id;
     ipSetArn = ipSetResult.Summary.ARN;
 
-    const webAclResult = await waf.send(new CreateWebACLCommand({
+    // IP Set 作成後、伝播を待ってから WebACL を作成（WAFUnavailableEntityException 対策）
+    const webAclResult = await withRetry(() => waf.send(new CreateWebACLCommand({
       Name: 'lydos-amplify-waf',
       Scope: 'CLOUDFRONT',
       DefaultAction: { Block: {} },
@@ -70,7 +87,7 @@ exports.handler = async (event) => {
         VisibilityConfig: { CloudWatchMetricsEnabled: false, MetricName: 'AllowSpecificIPs', SampledRequestsEnabled: false },
       }],
       VisibilityConfig: { CloudWatchMetricsEnabled: false, MetricName: 'LydosAmplifyWaf', SampledRequestsEnabled: false },
-    }));
+    })));
     webAclId = webAclResult.Summary.Id;
     webAclArn = webAclResult.Summary.ARN;
   } else {
