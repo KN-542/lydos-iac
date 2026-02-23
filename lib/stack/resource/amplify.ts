@@ -73,6 +73,14 @@ export class Amplify extends Construct {
         },
       }),
       iamServiceRole: serviceRole.roleArn,
+      // SPA用リライトルール: 静的ファイル以外はすべて index.html に書き換え
+      customRules: [
+        {
+          source: '</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>',
+          target: '/index.html',
+          status: '200',
+        },
+      ],
     })
 
     // Branch を作成
