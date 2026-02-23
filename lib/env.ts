@@ -32,6 +32,7 @@ export interface EnvConfig {
   stripeSecretKey: string
   geminiApiKey: string
   groqApiKey: string
+  stripePaidPlanPriceId: string
   viteClerkPublishableKey: string
   viteStripePublishableKey: string
   hostedZoneId: string
@@ -78,6 +79,7 @@ export function getEnvConfig(): EnvConfig {
     stripeSecretKey: getRequiredEnv('STRIPE_SECRET_KEY'),
     geminiApiKey: getRequiredEnv('GEMINI_API_KEY'),
     groqApiKey: getRequiredEnv('GROQ_API_KEY'),
+    stripePaidPlanPriceId: getRequiredEnv('STRIPE_PAID_PLAN_PRICE_ID'),
     viteClerkPublishableKey: getRequiredEnv('VITE_CLERK_PUBLISHABLE_KEY'),
     viteStripePublishableKey: getRequiredEnv('VITE_STRIPE_PUBLISHABLE_KEY'),
     hostedZoneId: getRequiredEnv('HOSTED_ZONE_ID'),

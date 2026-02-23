@@ -71,6 +71,7 @@ export class EcsStack extends cdk.Stack {
       DATABASE_NAME: props.config.rdsDatabaseName || 'lydos',
       REDIS_HOST: redisHost,
       REDIS_PORT: redisPort,
+      STRIPE_PAID_PLAN_PRICE_ID: props.config.stripePaidPlanPriceId,
     }
 
     // シークレット
