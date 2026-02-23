@@ -194,6 +194,49 @@ bunx cdk deploy --all
 - **Build**: Bun
 - **Custom Domain**: www.lydos.click
 
+## モバイルアプリ（lydos-app）テスト環境
+
+Expo Go を使ったテスト環境のセットアップ手順です。AWS インフラのデプロイは不要です。
+
+### 前提条件
+
+- テスト端末に **Expo Go** アプリをインストール（[App Store](https://apps.apple.com/app/expo-go/id982107779) / [Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent)）
+- 開発マシンと端末が同一 Wi-Fi に接続されていること
+
+### 手順
+
+**1. 環境変数を設定**
+
+`lydos-app/.env` でテスト環境用 API URL のコメントアウトを切り替える：
+
+```env
+# local
+# EXPO_PUBLIC_API_URL=http://localhost:3001
+
+# test
+EXPO_PUBLIC_API_URL=https://api.lydos.click
+```
+
+**2. 依存関係インストール（初回のみ）**
+
+```bash
+cd lydos-app
+bun install
+```
+
+**3. 開発サーバー起動**
+
+```bash
+bun run start
+```
+
+**4. QR コードをスキャン**
+
+- iOS: カメラアプリで QR コードをスキャン → Expo Go が起動
+- Android: Expo Go アプリ内でスキャン
+
+---
+
 ## Bastion Host 経由でのデータベース接続
 
 ### 1. 接続情報の取得
